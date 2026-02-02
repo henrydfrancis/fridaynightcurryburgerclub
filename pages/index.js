@@ -3,7 +3,7 @@ import { Camera, Check, X, LogOut, Shuffle, Calendar, MapPin, User, ChefHat, Upl
 import { db } from '../lib/firebase';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 
-const FOUNDING_MEMBERS = ['Henry', 'Woodall', 'Elliott'];
+const FOUNDING_MEMBERS = ['Henry', 'Woodall', 'Elliott', 'Beaz'];
 
 const INITIAL_MEMBERS = [
   { id: 1, name: 'Nathan', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null, profilePic: null },
@@ -62,6 +62,10 @@ export default function Home() {
   const [tempLocation, setTempLocation] = useState('');
   const [expandedHistory, setExpandedHistory] = useState({});
   const [uploadingProfilePic, setUploadingProfilePic] = useState(false);
+  const [editingCuisine, setEditingCuisine] = useState(false);
+  const [editingDate, setEditingDate] = useState(false);
+  const [tempCuisine, setTempCuisine] = useState('');
+  const [tempDate, setTempDate] = useState('');
 
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, 'clubData', 'main'), (docSnap) => {
@@ -71,7 +75,11 @@ export default function Home() {
           const merged = data.members.map(m => ({ ...m, profilePic: m.profilePic || null }));
           setMembers(merged);
         }
-        if (data.currentMonth) setCurrentMonth(data.currentMonth);
+        if (data.currentMonth) {
+          const fixed = { ...data.currentMonth };
+          if (fixed.month && fixed.month.includes('2025')) fixed.month = fixed.month.replace('2025', '2026');
+          setCurrentMonth(fixed);
+        }
         if (data.usedCuisines) setUsedCuisines(data.usedCuisines);
         if (data.history) setHistory(data.history);
       }
@@ -394,7 +402,7 @@ export default function Home() {
             {!uploadedImage ? (
               <label className="block border-2 border-dashed border-stone-300 rounded-xl p-8 text-center cursor-pointer hover:border-amber-400 transition-colors">
                 <Upload className="w-10 h-10 mx-auto text-stone-400 mb-2" /><p className="text-stone-500 font-semibold">Tap to upload photo</p>
-                <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhotoUpload} />
+                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
               </label>
             ) : (
               <div>
@@ -448,7 +456,18 @@ export default function Home() {
             <h2 className="font-bold text-stone-800 mb-4 flex items-center gap-2 brand-font"><Edit3 className="w-5 h-5" /> EDIT CURRENT MONTH</h2>
             <div className="space-y-4">
               <div className="p-3 bg-stone-50 rounded-lg"><p className="text-sm text-stone-500 font-bold mb-1">Month</p><p className="font-bold text-lg">{currentMonth.month}</p></div>
-              <div className="p-3 bg-stone-50 rounded-lg"><p className="text-sm text-stone-500 font-bold mb-1">Cuisine</p><p className="font-bold text-lg text-red-600">{currentMonth.cuisine}</p></div>
+              <div className="p-3 bg-stone-50 rounded-lg">
+                <p className="text-sm text-stone-500 font-bold mb-1">Cuisine</p>
+                {editingCuisine ? (
+                  <div className="flex gap-2">
+                    <select value={tempCuisine} onChange={(e) => setTempCuisine(e.target.value)} className="flex-1 px-3 py-2 border-2 border-stone-300 rounded-lg">{CUISINES.map(c => <option key={c} value={c}>{c}</option>)}</select>
+                    <button onClick={async () => { await updateCurrentMonth('cuisine', tempCuisine); setEditingCuisine(false); }} disabled={isSaving} className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50">Save</button>
+                    <button onClick={() => setEditingCuisine(false)} className="px-4 py-2 bg-stone-300 text-stone-700 rounded-lg font-semibold">Cancel</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between"><p className="font-bold text-lg text-red-600">{currentMonth.cuisine}</p><button onClick={() => { setTempCuisine(currentMonth.cuisine); setEditingCuisine(true); }} className="px-3 py-1 bg-amber-500 text-white rounded-lg text-sm font-semibold hover:bg-amber-600"><Edit3 className="w-4 h-4 inline mr-1" />Edit</button></div>
+                )}
+              </div>
               <div className="p-3 bg-stone-50 rounded-lg">
                 <p className="text-sm text-stone-500 font-bold mb-1">Organiser</p>
                 {editingOrganiser ? (
@@ -483,6 +502,18 @@ export default function Home() {
                   </div>
                 ) : (
                   <div className="flex items-center justify-between"><p className="font-bold text-lg">{currentMonth.location}</p><button onClick={() => { setTempLocation(currentMonth.location); setEditingLocation(true); }} className="px-3 py-1 bg-amber-500 text-white rounded-lg text-sm font-semibold hover:bg-amber-600"><Edit3 className="w-4 h-4 inline mr-1" />Edit</button></div>
+                )}
+              </div>
+              <div className="p-3 bg-stone-50 rounded-lg">
+                <p className="text-sm text-stone-500 font-bold mb-1">Date</p>
+                {editingDate ? (
+                  <div className="flex gap-2">
+                    <input type="text" value={tempDate} onChange={(e) => setTempDate(e.target.value)} placeholder="e.g. Friday 31st January" className="flex-1 px-3 py-2 border-2 border-stone-300 rounded-lg" />
+                    <button onClick={async () => { await updateCurrentMonth('date', tempDate); setEditingDate(false); }} disabled={isSaving} className="px-4 py-2 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50">Save</button>
+                    <button onClick={() => setEditingDate(false)} className="px-4 py-2 bg-stone-300 text-stone-700 rounded-lg font-semibold">Cancel</button>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between"><p className="font-bold text-lg">{currentMonth.date}</p><button onClick={() => { setTempDate(currentMonth.date); setEditingDate(true); }} className="px-3 py-1 bg-amber-500 text-white rounded-lg text-sm font-semibold hover:bg-amber-600"><Edit3 className="w-4 h-4 inline mr-1" />Edit</button></div>
                 )}
               </div>
             </div>
