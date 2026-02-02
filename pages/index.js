@@ -1,21 +1,21 @@
 import React, { useState, useEffect } from 'react';
-import { Camera, Check, X, LogOut, Shuffle, Calendar, MapPin, User, ChefHat, Upload, Shield, Scissors, UtensilsCrossed, Trophy, Eye, Clock, RefreshCw, Star, History, Plus, Minus, Image, Edit3, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
+import { Camera, Check, X, LogOut, Shuffle, Calendar, MapPin, User, ChefHat, Upload, Shield, Scissors, UtensilsCrossed, Trophy, Eye, Clock, RefreshCw, Star, History, Plus, Minus, Image, Edit3, RotateCcw, ChevronDown, ChevronUp, UserCircle } from 'lucide-react';
 import { db } from '../lib/firebase';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 
 const FOUNDING_MEMBERS = ['Henry', 'Woodall', 'Elliott'];
 
 const INITIAL_MEMBERS = [
-  { id: 1, name: 'Nathan', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null },
-  { id: 2, name: 'Hepburn', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null },
-  { id: 3, name: 'Beaz', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null },
-  { id: 4, name: 'Vinay', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null },
-  { id: 5, name: 'Josh P', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null },
-  { id: 6, name: 'Woodall', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null },
-  { id: 7, name: 'Elliott', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null },
-  { id: 8, name: 'Joel', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null },
-  { id: 9, name: 'Luke', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null },
-  { id: 10, name: 'Henry', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null },
+  { id: 1, name: 'Nathan', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null, profilePic: null },
+  { id: 2, name: 'Hepburn', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null, profilePic: null },
+  { id: 3, name: 'Beaz', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null, profilePic: null },
+  { id: 4, name: 'Vinay', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null, profilePic: null },
+  { id: 5, name: 'Josh P', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null, profilePic: null },
+  { id: 6, name: 'Woodall', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null, profilePic: null },
+  { id: 7, name: 'Elliott', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null, profilePic: null },
+  { id: 8, name: 'Joel', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null, profilePic: null },
+  { id: 9, name: 'Luke', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null, profilePic: null },
+  { id: 10, name: 'Henry', haircuts: 0, meals: 0, pendingHaircut: null, pendingMeal: null, profilePic: null },
 ];
 
 const CUISINES = ['Chinese', 'Thai', 'Italian', 'American', 'South American', 'Greek', 'Mexican', 'Spanish', 'Portuguese', 'Korean', 'Japanese', 'African', 'Indian', 'Jamaican', 'Vietnamese', 'Turkish', 'Lebanese', 'Caribbean', 'Ethiopian', 'Peruvian'];
@@ -29,6 +29,14 @@ const FoundingBadge = () => (
     <span className="hidden sm:inline">Founder</span>
   </span>
 );
+
+const MemberAvatar = ({ member, size = 'md' }) => {
+  const sizeClasses = { sm: 'w-8 h-8 text-sm', md: 'w-10 h-10 sm:w-12 sm:h-12 text-base sm:text-lg', lg: 'w-16 h-16 sm:w-20 sm:h-20 text-2xl', xl: 'w-20 h-20 sm:w-24 sm:h-24 text-3xl' };
+  if (member.profilePic) {
+    return <img src={member.profilePic} alt={member.name} className={`${sizeClasses[size]} rounded-full object-cover border-2 border-amber-400 shadow-md`} />;
+  }
+  return <div className={`${sizeClasses[size]} rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white font-bold shadow-md`}>{member.name.charAt(0)}</div>;
+};
 
 export default function Home() {
   const [currentView, setCurrentView] = useState('home');
@@ -53,12 +61,16 @@ export default function Home() {
   const [tempRestaurant, setTempRestaurant] = useState('');
   const [tempLocation, setTempLocation] = useState('');
   const [expandedHistory, setExpandedHistory] = useState({});
+  const [uploadingProfilePic, setUploadingProfilePic] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(doc(db, 'clubData', 'main'), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        if (data.members) setMembers(data.members);
+        if (data.members) {
+          const merged = data.members.map(m => ({ ...m, profilePic: m.profilePic || null }));
+          setMembers(merged);
+        }
         if (data.currentMonth) setCurrentMonth(data.currentMonth);
         if (data.usedCuisines) setUsedCuisines(data.usedCuisines);
         if (data.history) setHistory(data.history);
@@ -120,19 +132,19 @@ export default function Home() {
     await saveToFirebase(members, restoredMonth, usedCuisines, newHistory);
   };
 
-  const compressImage = (file, callback) => {
+  const compressImage = (file, callback, quality) => {
     const reader = new FileReader();
     reader.onloadend = () => {
       const img = new window.Image();
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const maxSize = 800;
+        const maxSize = quality === 'low' ? 200 : 800;
         let width = img.width, height = img.height;
         if (width > height && width > maxSize) { height = (height * maxSize) / width; width = maxSize; }
         else if (height > maxSize) { width = (width * maxSize) / height; height = maxSize; }
         canvas.width = width; canvas.height = height;
         canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-        callback(canvas.toDataURL('image/jpeg', 0.6));
+        callback(canvas.toDataURL('image/jpeg', quality === 'low' ? 0.5 : 0.6));
       };
       img.src = reader.result;
     };
@@ -141,6 +153,19 @@ export default function Home() {
 
   const handlePhotoUpload = (e) => { if (e.target.files[0]) compressImage(e.target.files[0], setUploadedImage); };
   const handleHistoryPhotoUpload = (e, historyId) => { if (e.target.files[0]) compressImage(e.target.files[0], (data) => updateHistoryPhoto(historyId, data)); };
+
+  const handleProfilePicUpload = async (e) => {
+    if (!e.target.files[0] || !selectedMember) return;
+    setIsSaving(true);
+    compressImage(e.target.files[0], async (compressedData) => {
+      const updatedMembers = members.map(m => m.id === selectedMember.id ? { ...m, profilePic: compressedData } : m);
+      setMembers(updatedMembers);
+      setSelectedMember(updatedMembers.find(m => m.id === selectedMember.id));
+      await saveToFirebase(updatedMembers, currentMonth, usedCuisines, history);
+      setUploadingProfilePic(false);
+      setIsSaving(false);
+    }, 'low');
+  };
 
   const updateHistoryPhoto = async (historyId, photoData) => {
     const newHistory = history.map(h => h.id === historyId ? { ...h, photo: photoData } : h);
@@ -249,7 +274,7 @@ export default function Home() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {members.map(member => (
             <button key={member.id} onClick={() => { setSelectedMember(member); setCurrentView('member'); }} className="bg-white p-3 sm:p-4 rounded-xl shadow-lg border-2 border-stone-200 hover:border-amber-400 hover:shadow-xl transition-all duration-300 text-left">
-              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white font-bold text-base sm:text-lg mb-2 shadow-md">{member.name.charAt(0)}</div>
+              <div className="mb-2"><MemberAvatar member={member} size="md" /></div>
               <p className="font-bold text-stone-800 text-sm sm:text-base truncate">{member.name}{isFoundingMember(member.name) && <FoundingBadge />}</p>
               <div className="flex gap-2 sm:gap-3 mt-2 text-xs text-stone-500"><span className="flex items-center gap-1"><Scissors className="w-3 h-3 text-red-500" /> {member.haircuts}</span><span className="flex items-center gap-1"><UtensilsCrossed className="w-3 h-3 text-amber-500" /> {member.meals}</span></div>
             </button>
@@ -263,6 +288,7 @@ export default function Home() {
           {[...members].sort((a, b) => (b.haircuts + b.meals) - (a.haircuts + a.meals)).map((member, index) => (
             <div key={member.id} className={`p-3 flex items-center gap-3 ${index > 0 ? 'border-t border-stone-100' : ''}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm flex-shrink-0 ${index === 0 ? 'bg-amber-400 text-white' : index === 1 ? 'bg-stone-300 text-stone-700' : index === 2 ? 'bg-orange-300 text-orange-800' : 'bg-stone-100 text-stone-500'}`}>{index + 1}</div>
+              <MemberAvatar member={member} size="sm" />
               <div className="flex-1 min-w-0"><p className="font-semibold text-stone-800 truncate">{member.name}{isFoundingMember(member.name) && <FoundingBadge />}</p></div>
               <div className="text-right flex-shrink-0"><p className="font-bold text-lg text-amber-600">{member.haircuts + member.meals}</p><p className="text-xs text-stone-500">stamps</p></div>
             </div>
@@ -320,14 +346,25 @@ export default function Home() {
     const member = members.find(m => m.id === selectedMember.id);
     return (
       <div className="min-h-screen bg-gradient-to-b from-amber-50 to-orange-50 p-4">
-        <button onClick={() => { setCurrentView('home'); setSelectedMember(null); setUploadingType(null); setUploadedImage(null); }} className="mb-4 flex items-center gap-2 text-stone-600 hover:text-stone-800 font-semibold"><X className="w-5 h-5" /> Back</button>
+        <button onClick={() => { setCurrentView('home'); setSelectedMember(null); setUploadingType(null); setUploadedImage(null); setUploadingProfilePic(false); }} className="mb-4 flex items-center gap-2 text-stone-600 hover:text-stone-800 font-semibold"><X className="w-5 h-5" /> Back</button>
         <div className="bg-white rounded-2xl shadow-xl overflow-hidden border-2 border-stone-200 max-w-md mx-auto">
           <div className="bg-gradient-to-r from-stone-800 to-stone-900 text-white p-4 text-center">
             <img src="/logo.png" alt="Logo" className="w-16 h-16 sm:w-20 sm:h-20 rounded-full border-2 border-amber-400 mx-auto mb-2 object-cover" />
             <h2 className="text-xl brand-font"><span className="text-red-500">FRIDAY NIGHT</span><span className="block text-amber-400 text-sm">MONTHLY</span></h2>
             <p className="text-xs tracking-widest text-stone-400">HAIRCUT • CURRY • BURGER CLUB</p>
           </div>
-          <div className="bg-amber-400 py-2 text-center"><p className="font-black text-stone-900 text-lg sm:text-xl tracking-wide brand-font">{member.name}{isFoundingMember(member.name) && <FoundingBadge />}</p></div>
+          <div className="bg-amber-400 py-3 text-center">
+            <div className="flex flex-col items-center gap-2">
+              <div className="relative">
+                <MemberAvatar member={member} size="xl" />
+                <label className="absolute bottom-0 right-0 bg-white rounded-full p-1.5 shadow-lg cursor-pointer hover:bg-stone-100 border-2 border-stone-200">
+                  <Camera className="w-4 h-4 text-stone-600" />
+                  <input type="file" accept="image/*" className="hidden" onChange={handleProfilePicUpload} />
+                </label>
+              </div>
+              <p className="font-black text-stone-900 text-lg sm:text-xl tracking-wide brand-font">{member.name}{isFoundingMember(member.name) && <FoundingBadge />}</p>
+            </div>
+          </div>
           <div className="p-4 space-y-6">
             <div>
               <div className="flex items-center gap-2 mb-2"><Scissors className="w-5 h-5 text-red-600" /><h3 className="font-bold text-stone-800 brand-font">HAIRCUT STAMPS</h3><span className="ml-auto text-sm text-stone-500 font-bold">{member.haircuts}/12</span></div>
