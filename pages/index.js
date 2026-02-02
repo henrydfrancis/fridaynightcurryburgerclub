@@ -52,6 +52,7 @@ export default function Home() {
   const [usedCuisines, setUsedCuisines] = useState(['African']);
   const [currentMonth, setCurrentMonth] = useState({ month: 'January 2026', cuisine: 'African', restaurant: 'The Merge', location: 'TBD', date: 'Last Friday of January', organiser: 'Nathan' });
   const [history, setHistory] = useState([]);
+  const [currentMonthPhotos, setCurrentMonthPhotos] = useState([]);
   const [uploadingType, setUploadingType] = useState(null);
   const [uploadedImage, setUploadedImage] = useState(null);
   const [editingOrganiser, setEditingOrganiser] = useState(false);
@@ -82,16 +83,17 @@ export default function Home() {
         }
         if (data.usedCuisines) setUsedCuisines(data.usedCuisines);
         if (data.history) setHistory(data.history);
+        if (data.currentMonthPhotos) setCurrentMonthPhotos(data.currentMonthPhotos);
       }
       setIsLoading(false);
     }, (error) => { console.error("Error:", error); setIsLoading(false); });
     return () => unsubscribe();
   }, []);
 
-  const saveToFirebase = async (newMembers, newMonth, newUsedCuisines, newHistory) => {
+  const saveToFirebase = async (newMembers, newMonth, newUsedCuisines, newHistory, newCMP) => {
     setIsSaving(true);
     try {
-      await setDoc(doc(db, 'clubData', 'main'), { members: newMembers || members, currentMonth: newMonth || currentMonth, usedCuisines: newUsedCuisines || usedCuisines, history: newHistory || history, lastUpdated: new Date().toISOString() });
+      await setDoc(doc(db, 'clubData', 'main'), { members: newMembers || members, currentMonth: newMonth || currentMonth, usedCuisines: newUsedCuisines || usedCuisines, history: newHistory || history, currentMonthPhotos: newCMP !== undefined ? newCMP : currentMonthPhotos, lastUpdated: new Date().toISOString() });
     } catch (error) { console.error("Error saving:", error); alert("Error saving. Try again."); }
     setIsSaving(false);
   };
@@ -115,7 +117,7 @@ export default function Home() {
 
   const generateNewMonth = async () => {
     if (!isAdmin) return;
-    const historyEntry = { id: Date.now(), month: currentMonth.month, cuisine: currentMonth.cuisine, restaurant: currentMonth.restaurant, location: currentMonth.location, organiser: currentMonth.organiser, photo: null, verificationPhotos: [] };
+    const historyEntry = { id: Date.now(), month: currentMonth.month, cuisine: currentMonth.cuisine, restaurant: currentMonth.restaurant, location: currentMonth.location, organiser: currentMonth.organiser, photo: null, verificationPhotos: currentMonthPhotos || [] };
     const newHistory = [historyEntry, ...history];
     let availableCuisines = CUISINES.filter(c => !usedCuisines.includes(c));
     if (availableCuisines.length === 0) availableCuisines = CUISINES;
@@ -128,8 +130,8 @@ export default function Home() {
     const nextYear = nextMonthIndex === 0 ? currentYear + 1 : currentYear;
     const newMonth = { month: `${months[nextMonthIndex]} ${nextYear}`, cuisine: randomCuisine, restaurant: 'TBD - Awaiting Organiser', location: 'TBD', date: `Last Friday of ${months[nextMonthIndex]}`, organiser: randomOrganiser.name };
     const newUsedCuisines = availableCuisines.length === CUISINES.length ? [randomCuisine] : [...usedCuisines, randomCuisine];
-    setCurrentMonth(newMonth); setUsedCuisines(newUsedCuisines); setHistory(newHistory);
-    await saveToFirebase(members, newMonth, newUsedCuisines, newHistory);
+    setCurrentMonth(newMonth); setUsedCuisines(newUsedCuisines); setHistory(newHistory); setCurrentMonthPhotos([]);
+    await saveToFirebase(members, newMonth, newUsedCuisines, newHistory, []);
   };
 
   const restoreFromHistory = async (historyEntry) => {
@@ -200,18 +202,15 @@ export default function Home() {
     if (!isAdmin) return;
     const member = members.find(m => m.id === memberId);
     const photo = type === 'haircut' ? member.pendingHaircut : member.pendingMeal;
-    let newHistory = history;
-    if (history.length > 0) {
-      newHistory = history.map((h, idx) => idx === 0 ? { ...h, verificationPhotos: [...(h.verificationPhotos || []), { photo, memberName: member.name, type, timestamp: Date.now() }] } : h);
-    }
+    const newCMP = [...currentMonthPhotos, { photo, memberName: member.name, type, timestamp: Date.now() }];
     const updatedMembers = members.map(m => {
       if (m.id === memberId) {
         return type === 'haircut' ? { ...m, haircuts: m.haircuts + 1, pendingHaircut: null } : { ...m, meals: m.meals + 1, pendingMeal: null };
       }
       return m;
     });
-    setMembers(updatedMembers); setHistory(newHistory);
-    await saveToFirebase(updatedMembers, currentMonth, usedCuisines, newHistory);
+    setMembers(updatedMembers); setCurrentMonthPhotos(newCMP);
+    await saveToFirebase(updatedMembers, currentMonth, usedCuisines, history, newCMP);
   };
 
   const rejectStamp = async (memberId, type) => {
@@ -303,6 +302,22 @@ export default function Home() {
           ))}
         </div>
       </div>
+
+      {currentMonthPhotos && currentMonthPhotos.length > 0 && (
+        <div className="p-4">
+          <h3 className="text-xl font-bold text-stone-800 mb-3 flex items-center gap-2 brand-font"><Camera className="w-5 h-5 text-red-500" />THIS MONTH'S STAMPS</h3>
+          <div className="bg-white rounded-xl shadow-lg p-4 border-2 border-stone-200">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+              {currentMonthPhotos.map((vp, idx) => (
+                <div key={idx} className="relative">
+                  <img src={vp.photo} alt={`${vp.memberName} ${vp.type}`} className="w-full h-24 object-cover rounded-lg" />
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs p-1 rounded-b-lg"><span className="flex items-center gap-1">{vp.type === 'haircut' ? <Scissors className="w-3 h-3" /> : <UtensilsCrossed className="w-3 h-3" />}{vp.memberName}</span></div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="p-4">
         <h3 className="text-xl font-bold text-stone-800 mb-3 flex items-center gap-2 brand-font"><History className="w-5 h-5 text-stone-600" />CLUB HISTORY</h3>
