@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Camera, Check, X, LogOut, Shuffle, Calendar, MapPin, User, ChefHat, Upload, Shield, Scissors, UtensilsCrossed, Trophy, Eye, Clock, RefreshCw, Star, History, Plus, Minus, Image, Edit3, RotateCcw, ChevronDown, ChevronUp, UserCircle } from 'lucide-react';
-import { db } from '../lib/firebase';
+import { db, storage } from '../lib/firebase';
 import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import { ref, uploadString, getDownloadURL } from 'firebase/storage';
 
 const FOUNDING_MEMBERS = ['Henry', 'Woodall', 'Elliott', 'Beaz'];
 
@@ -90,11 +91,60 @@ export default function Home() {
     return () => unsubscribe();
   }, []);
 
+  // ─── Upload a base64 image to Firebase Storage, return the download URL ───
+  const uploadImageToStorage = async (base64Data, path) => {
+    if (!base64Data || !base64Data.startsWith('data:')) return base64Data; // already a URL or null
+    const storageRef = ref(storage, path);
+    await uploadString(storageRef, base64Data, 'data_url');
+    return await getDownloadURL(storageRef);
+  };
+
+  // ─── Save to Firestore — images are uploaded to Storage first ───
   const saveToFirebase = async (newMembers, newMonth, newUsedCuisines, newHistory, newCMP) => {
     setIsSaving(true);
     try {
-      await setDoc(doc(db, 'clubData', 'main'), { members: newMembers || members, currentMonth: newMonth || currentMonth, usedCuisines: newUsedCuisines || usedCuisines, history: newHistory || history, currentMonthPhotos: newCMP !== undefined ? newCMP : currentMonthPhotos, lastUpdated: new Date().toISOString() });
-    } catch (error) { console.error("Error saving:", error); alert("Error saving. Try again."); }
+      // Upload member profile pics
+      const membersToSave = await Promise.all(
+        (newMembers || members).map(async (m) => ({
+          ...m,
+          profilePic: await uploadImageToStorage(m.profilePic, `profilePics/member_${m.id}.jpg`),
+        }))
+      );
+
+      // Upload current month verification photos
+      const cmpToSave = await Promise.all(
+        (newCMP !== undefined ? newCMP : currentMonthPhotos).map(async (p, i) => ({
+          ...p,
+          photo: await uploadImageToStorage(p.photo, `verificationPhotos/${Date.now()}_${i}.jpg`),
+        }))
+      );
+
+      // Upload history photos (group photo + verification photos)
+      const historyToSave = await Promise.all(
+        (newHistory || history).map(async (entry) => ({
+          ...entry,
+          photo: await uploadImageToStorage(entry.photo, `historyPhotos/${entry.id}_group.jpg`),
+          verificationPhotos: await Promise.all(
+            (entry.verificationPhotos || []).map(async (vp, i) => ({
+              ...vp,
+              photo: await uploadImageToStorage(vp.photo, `historyPhotos/${entry.id}_${i}.jpg`),
+            }))
+          ),
+        }))
+      );
+
+      await setDoc(doc(db, 'clubData', 'main'), {
+        members: membersToSave,
+        currentMonth: newMonth || currentMonth,
+        usedCuisines: newUsedCuisines || usedCuisines,
+        history: historyToSave,
+        currentMonthPhotos: cmpToSave,
+        lastUpdated: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Error saving:", error);
+      alert("Error saving. Try again.");
+    }
     setIsSaving(false);
   };
 
